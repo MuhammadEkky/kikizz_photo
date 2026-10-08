@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Photobooth</title>
+<style>
+  :root{
+    --bg:#ffffff;
+    --bg-2:#f6f3ec;
+    --bulb:#f2b544;
+    --bulb-dim:#e3d6b4;
+    --cream:#1c1814;
+    --cream-dim:#7a7064;
+    --strip:#faf6ec;
+    --strip-shadow:#0a0908;
+    --red:#c23b2e;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(ellipse at 50% -10%, #f3efe6 0%, var(--bg) 60%),
+      var(--bg);
+    color:var(--cream);
+    font-family: 'Courier New', ui-monospace, Menlo, monospace;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding: 28px 16px 60px;
+  }
+  .marquee{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    margin-bottom: 26px;
+  }
+  .bulb{
+    width:9px;height:9px;border-radius:50%;
+    background:var(--bulb-dim);
+    box-shadow: 0 0 4px var(--bulb-dim);
+    animation: twinkle 2.6s ease-in-out infinite;
+  }
+  .bulb:nth-child(odd){animation-delay:.4s;}
+  .bulb:nth-child(3n){animation-delay:.9s;}
+  @keyframes twinkle{
+    0%,100%{background:var(--bulb-dim); box-shadow:0 0 4px var(--bulb-dim);}
+    50%{background:var(--bulb); box-shadow:0 0 10px var(--bulb);}
+  }
+  h1{
+    font-family: Georgia, 'Times New Roman', serif;
+    font-style: italic;
+    font-weight: 400;
+    letter-spacing: 0.5px;
+    font-size: clamp(28px, 5vw, 44px);
+    margin: 0;
+    color: var(--cream);
+  }
+  .sub{
+    text-align:center;
+    color: var(--cream-dim);
+    font-size: 12px;
+    letter-spacing: 1px;
+    margin-top: -14px;
+    margin-bottom: 30px;
+  }
+
+  .stage{
+    display:flex;
+    gap: 36px;
+    align-items:flex-start;
+    flex-wrap: wrap;
+    justify-content:center;
+    width: 100%;
+    max-width: 980px;
+  }
+
+  .booth{
+    background: var(--bg-2);
+    border: 1px solid #ddd5c7;
+    border-radius: 6px;
+    padding: 18px;
+    width: 460px;
+    max-width: 92vw;
+  }
+  .viewfinder{
+    position:relative;
+    width:100%;
+    aspect-ratio: 4/3;
+    background:#000;
+    border-radius: 3px;
+    overflow:hidden;
+    border: 1px solid #000;
+  }
+  video, canvas.preview-frame{
+    width:100%;height:100%;object-fit:cover;display:block;
+  }
+  video.bw{ filter: grayscale(1) contrast(1.15); }
+  video.koran{ filter: grayscale(1) contrast(1.6) brightness(1.12); }
+  video.sepia{ filter: grayscale(1) sepia(.75) contrast(1.08) brightness(1.04) saturate(.9); }
+  video.film{ filter: grayscale(1) sepia(.9) contrast(1.4) brightness(.92); }
+  video.mirror{ transform: scaleX(-1); }
+  .viewfinder.film-mode{ aspect-ratio: 4/5; max-width: 360px; margin: 0 auto; }
+  .viewfinder canvas.preview-frame{ position:absolute; inset:0; display:none; }
+
+  .vintage-overlay{
+    position:absolute; inset:0; pointer-events:none; opacity:0; transition:opacity .2s;
+    background:
+      radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(20,10,0,.55) 100%),
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .5  0 0 0 0 .4  0 0 0 0 .3  0 0 0 .55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    mix-blend-mode: multiply;
+  }
+
+  .halftone-overlay{
+    position:absolute; inset:0;
+    background-image: radial-gradient(circle, rgba(0,0,0,0.6) 1px, transparent 1.5px);
+    background-size: 4px 4px;
+    mix-blend-mode: multiply;
+    opacity: 0;
+    pointer-events:none;
+  }
+  .viewfinder.koran-mode .halftone-overlay{ opacity: .55; }
+  .viewfinder.koran-mode{ filter: sepia(0.08); }
+
+  .countdown{
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    font-family: Georgia, serif;
+    font-size: 96px;
+    color: #fff;
+    text-shadow: 0 0 24px rgba(0,0,0,.6);
+    background: rgba(0,0,0,0.15);
+    opacity:0;
+    pointer-events:none;
+  }
+  .countdown.show{ opacity:1; }
+
+  .flash{
+    position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none;
+  }
+  .flash.pop{ animation: flashpop .35s ease-out; }
+  @keyframes flashpop{
+    0%{opacity:.95;} 100%{opacity:0;}
+  }
+
+  .shot-counter{
+    position:absolute; top:10px; left:10px;
+    background: rgba(0,0,0,0.55);
+    color: var(--cream);
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    letter-spacing: 1px;
+  }
+
+  .controls{
+    display:flex;
+    gap:10px;
+    margin-top: 16px;
+    align-items:center;
+    flex-wrap: wrap;
+  }
+  .toggle{
+    display:flex;
+    border:1px solid #cfc7b8;
+    border-radius: 20px;
+    overflow:hidden;
+    font-size: 11px;
+  }
+  .toggle button{
+    background: transparent;
+    border:none;
+    color: var(--cream-dim);
+    padding: 7px 14px;
+    cursor:pointer;
+    font-family: inherit;
+    letter-spacing: 0.5px;
+  }
+  .toggle button.active{
+    background: var(--cream);
+    color: #ffffff;
+  }
+
+  .btn{
+    font-family: inherit;
+    background: var(--red);
+    color: #fff;
+    border: none;
+    padding: 10px 22px;
+    border-radius: 22px;
+    font-size: 13px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: transform .12s ease, background .2s ease;
+  }
+  .btn:hover{ transform: translateY(-1px); background:#a92f24; }
+  .btn:active{ transform: translateY(0); }
+  .btn:disabled{ background:#d4cdbf; color:#fff; cursor:not-allowed; transform:none; }
+
+  .btn.ghost{
+    background: transparent;
+    border: 1px solid #cfc7b8;
+    color: var(--cream-dim);
+  }
+  .btn.ghost:hover{ background:#ece7dc; color:var(--cream); }
+
+  .hint{
+    color: var(--cream-dim);
+    font-size: 11px;
+    margin-top: 10px;
+    line-height:1.6;
+  }
+
+  /* Strip */
+  .strip-wrap{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    width: 220px;
+  }
+  .strip-label{
+    font-size:11px; letter-spacing:2px; color:var(--cream-dim); margin-bottom:10px;
+  }
+  .strip{
+    background: var(--strip);
+    padding: 16px 16px 26px;
+    width: 200px;
+    box-shadow: 0 10px 26px rgba(0,0,0,.18), 0 0 0 1px #e4dccb;
+    transform: rotate(-1.2deg);
+  }
+  .strip .frame{
+    width:100%;
+    aspect-ratio: 4/3;
+    background:#0c0c0c;
+    margin-bottom: 12px;
+    overflow:hidden;
+    position:relative;
+  }
+  .strip .frame:last-of-type{ margin-bottom: 0; }
+  .strip .frame img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .strip .frame.empty::after{
+    content:'';
+  }
+  .strip .frame{ cursor: default; }
+  .strip .frame .retake{
+    position:absolute;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background: rgba(10,9,8,0.55);
+    opacity:0;
+    transition: opacity .15s ease;
+    cursor:pointer;
+  }
+  .strip .frame:hover .retake{ opacity:1; }
+  .strip .frame .retake span{
+    font-family: 'Courier New', ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: #faf6ec;
+    border: 1px solid #faf6ec;
+    padding: 5px 10px;
+    border-radius: 14px;
+  }
+  .strip .frame.empty .retake, .strip .frame.busy .retake{ display:none; }
+  .strip .frame .num{
+    position:absolute;
+    top:4px; left:6px;
+    font-size:10px;
+    color: rgba(255,255,255,.55);
+    font-family:'Courier New', monospace;
+    z-index:1;
+  }
+  .strip-foot{
+    text-align:center;
+    font-family: Georgia, serif;
+    font-style: italic;
+    font-size: 12px;
+    color:#161311;
+    margin-top: 14px;
+    opacity: .75;
+  }
+
+  .strip-actions{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    margin-top: 18px;
+    width: 100%;
+  }
+  .strip-actions .btn{ width:100%; }
+
+  /* Layout film 2x2 */
+  .strip-wrap.film{ width: 320px; }
+  .strip.grid{
+    width: 320px; padding: 4px; gap: 4px; background:#0a0807; transform:none;
+    display:grid; grid-template-columns: 1fr 1fr;
+  }
+  .strip.grid .frame{ aspect-ratio: 4/5; margin-bottom:0 !important; }
+  .strip.grid .strip-foot{ display:none; }
+
+  @media (max-width: 720px){
+    .stage{ flex-direction:column; align-items:center; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="marquee">
+    <div class="bulb"></div><div class="bulb"></div><div class="bulb"></div>
+    <h1>Photobooth</h1>
+    <div class="bulb"></div><div class="bulb"></div><div class="bulb"></div>
+  </div>
+  <div class="sub">4 JEPRETAN &middot; PILIH WARNA / HITAM PUTIH &middot; UNDUH STRIP-NYA</div>
+
+  <div class="stage">
+    <div class="booth">
+      <div class="viewfinder" id="viewfinder">
+        <video id="video" autoplay playsinline muted class="mirror"></video>
+        <div class="halftone-overlay" id="halftoneOverlay"></div>
+        <canvas id="pv" class="preview-frame"></canvas>
+        <div class="shot-counter" id="shotCounter">0 / 4</div>
+        <div class="countdown" id="countdown">3</div>
+        <div class="flash" id="flash"></div>
+      </div>
+
+      <div class="controls">
+        <div class="toggle" id="filterToggle">
+          <button data-filter="color" class="active">WARNA</button>
+          <button data-filter="bw">HITAM PUTIH</button>
+          <button data-filter="koran">KORAN</button>
+          <button data-filter="sepia">VINTAGE</button>
+          <button data-filter="film">FILM 2x2</button>
+        </div>
+        <button class="btn" id="startBtn">MULAI &middot; 4 FOTO</button>
+        <button class="btn ghost" id="resetBtn">ULANG</button>
+      </div>
+      <div class="hint" id="hint">Izinkan akses kamera untuk mulai. Setiap foto diambil otomatis dengan hitungan mundur 3 detik.</div>
+    </div>
+
+    <div class="strip-wrap">
+      <div class="strip-label">HASIL STRIP</div>
+      <div class="strip" id="strip">
+        <div class="frame empty" data-slot="0"><span class="num">1</span><div class="retake"><span>ULANG</span></div></div>
+        <div class="frame empty" data-slot="1"><span class="num">2</span><div class="retake"><span>ULANG</span></div></div>
+        <div class="frame empty" data-slot="2"><span class="num">3</span><div class="retake"><span>ULANG</span></div></div>
+        <div class="frame empty" data-slot="3"><span class="num">4</span><div class="retake"><span>ULANG</span></div></div>
+        <div class="strip-foot">photobooth &middot; jayapura</div>
+      </div>
+      <div class="strip-actions">
+        <button class="btn" id="downloadBtn" disabled>UNDUH STRIP</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const video = document.getElementById('video');
+  const startBtn = document.getElementById('startBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const countdownEl = document.getElementById('countdown');
+  const flashEl = document.getElementById('flash');
+  const shotCounter = document.getElementById('shotCounter');
+  const hint = document.getElementById('hint');
+  const toggleBtns = document.querySelectorAll('#filterToggle button');
+  const frames = document.querySelectorAll('.strip .frame');
+
+  let filterMode = 'color'; // or 'bw'
+  let shots = []; // dataURLs
+  let busy = false;
+
+  const viewfinder = document.getElementById('viewfinder');
+  const stripEl = document.getElementById('strip');
+
+  toggleBtns.forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      toggleBtns.forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      filterMode = btn.dataset.filter;
+      video.classList.remove('bw','koran','sepia','film');
+      viewfinder.classList.remove('koran-mode','sepia-mode','film-mode');
+      stripEl.classList.toggle('grid', btn.dataset.filter === 'film');
+      if(btn.dataset.filter === 'sepia' || btn.dataset.filter === 'film'){ if(!pvRaf) pvLoop(); } else { pv.style.display = 'none'; }
+      stripEl.parentElement.classList.toggle('film', btn.dataset.filter === 'film');
+      if(filterMode === 'bw'){ video.classList.add('bw'); }
+      if(filterMode === 'koran'){ video.classList.add('koran'); viewfinder.classList.add('koran-mode'); }
+      if(filterMode === 'sepia'){ video.classList.add('sepia'); viewfinder.classList.add('sepia-mode'); }
+      if(filterMode === 'film'){ video.classList.add('film'); viewfinder.classList.add('film-mode'); }
+    });
+  });
+
+  // Preview live pakai pemrosesan yang sama dengan hasil foto
+  const pv = document.getElementById('pv');
+  const pvOff = document.createElement('canvas');
+  let pvRaf = null;
+  function pvLoop(){
+    if(filterMode !== 'sepia' && filterMode !== 'film'){ pv.style.display = 'none'; pvRaf = null; return; }
+    const w = video.videoWidth, h = video.videoHeight;
+    if(video.readyState >= 2 && w){
+      const isFilm = filterMode === 'film';
+      const ch = Math.min(h, 480), sc = ch / h;
+      const cw = isFilm ? Math.round(ch*0.8) : Math.round(w*sc);
+      if(pvOff.width !== cw || pvOff.height !== ch){ pvOff.width = cw; pvOff.height = ch; }
+      const c = pvOff.getContext('2d', {willReadFrequently:true});
+      c.setTransform(1,0,0,1,0,0);
+      c.translate(cw,0); c.scale(-1,1);
+      if(isFilm){ const sw = Math.round(h*0.8); c.drawImage(video, (w-sw)/2, 0, sw, h, 0, 0, cw, ch); }
+      else { c.drawImage(video, 0, 0, cw, ch); }
+      if(isFilm){ applyFilm(pvOff, {seed:7, leak:false}); } else { applyVintage(pvOff, {}); }
+      if(pv.width !== cw || pv.height !== ch){ pv.width = cw; pv.height = ch; }
+      pv.getContext('2d').drawImage(pvOff, 0, 0);
+      pv.style.display = 'block';
+    }
+    pvRaf = requestAnimationFrame(pvLoop);
+  }
+
+  async function initCamera(){
+    try{
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio:false });
+      video.srcObject = stream;
+      hint.textContent = 'Kamera siap. Klik "MULAI" untuk ambil 4 foto berurutan.';
+      startBtn.disabled = false;
+    }catch(err){
+      hint.textContent = 'Tidak bisa mengakses kamera. Pastikan izin kamera diaktifkan di browser, lalu muat ulang halaman.';
+      startBtn.disabled = true;
+    }
+  }
+
+  function randomName(prefix){
+    const bytes = new Uint8Array(6);
+    crypto.getRandomValues(bytes);
+    const id = Array.from(bytes, b => b.toString(16).padStart(2,'0')).join('');
+    return prefix + '-' + id + '.jpg';
+  }
+
+  function wait(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+  async function runCountdown(){
+    for(const n of [3,2,1]){
+      countdownEl.textContent = n;
+      countdownEl.classList.add('show');
+      await wait(700);
+      countdownEl.classList.remove('show');
+      await wait(150);
+    }
+  }
+
+  function applyHalftone(sourceCanvas){
+    const w = sourceCanvas.width, h = sourceCanvas.height;
+    const srcCtx = sourceCanvas.getContext('2d');
+    const imgData = srcCtx.getImageData(0,0,w,h).data;
+
+    const out = document.createElement('canvas');
+    out.width = w; out.height = h;
+    const octx = out.getContext('2d');
+    octx.fillStyle = '#f2eee2';
+    octx.fillRect(0,0,w,h);
+
+    const cell = Math.max(4, Math.round(w/150));
+    octx.fillStyle = '#161311';
+
+    for(let y=0; y<h; y+=cell){
+      for(let x=0; x<w; x+=cell){
+        let total=0, count=0;
+        for(let dy=0; dy<cell && y+dy<h; dy+=2){
+          for(let dx=0; dx<cell && x+dx<w; dx+=2){
+            const idx = ((y+dy)*w + (x+dx)) * 4;
+            const r=imgData[idx], g=imgData[idx+1], b=imgData[idx+2];
+            total += 0.299*r + 0.587*g + 0.114*b;
+            count++;
+          }
+        }
+        const avg = count ? total/count : 255;
+        const darkness = 1 - (avg/255);
+        const radius = (cell*0.62) * Math.sqrt(darkness);
+        if(radius > 0.35){
+          octx.beginPath();
+          octx.arc(x+cell/2, y+cell/2, radius, 0, Math.PI*2);
+          octx.fill();
+        }
+      }
+    }
+    return out;
+  }
+
+  // Efek photobooth jadul: monokrom sepia, hitam terangkat, grain, vignette
+  function rng(seed){
+    return function(){
+      seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+      let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  function applyVintage(canvas, opts){
+    const w = canvas.width, h = canvas.height;
+    const ctx = canvas.getContext('2d');
+    const img = ctx.getImageData(0,0,w,h);
+    const d = img.data;
+    const dark = [34,24,17], light = [248,238,216];
+    const cx = w/2, cy = h/2, maxD = Math.sqrt(cx*cx + cy*cy);
+    for(let y=0; y<h; y++){
+      for(let x=0; x<w; x++){
+        const i = (y*w + x)*4;
+        let l = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+        l = (l-128)*1.12 + 132;                         // kontras lembut
+        l += (Math.random()-0.5) * 30;                  // grain
+        const dx = x-cx, dy = y-cy;
+        const v = 1 - 0.5 * Math.pow(Math.sqrt(dx*dx+dy*dy)/maxD, 2.2); // vignette
+        let t = Math.min(1, Math.max(0, (l/255) * v));
+        d[i]   = dark[0] + (light[0]-dark[0])*t;
+        d[i+1] = dark[1] + (light[1]-dark[1])*t;
+        d[i+2] = dark[2] + (light[2]-dark[2])*t;
+      }
+    }
+    ctx.putImageData(img,0,0);
+    return canvas;
+  }
+
+  // Efek film photobooth: sepia kontras tinggi, bayangan pekat, grain, tepi sobek, light leak
+  function applyFilm(canvas, opts){
+    opts = opts || {};
+    const r = rng(opts.seed || 1);
+    const w = canvas.width, h = canvas.height;
+    const ctx = canvas.getContext('2d');
+    const img = ctx.getImageData(0,0,w,h);
+    const d = img.data;
+    const dark = [12,9,6], light = [238,224,192];
+    const cx = w/2, cy = h/2, maxD = Math.sqrt(cx*cx + cy*cy);
+    for(let y=0; y<h; y++){
+      for(let x=0; x<w; x++){
+        const i = (y*w + x)*4;
+        let l = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+        l = (l-112)*1.35 + 108;
+        l += (Math.random()-0.5) * 44;
+        const dx = x-cx, dy = y-cy;
+        const v = 1 - 0.6 * Math.pow(Math.sqrt(dx*dx+dy*dy)/maxD, 2);
+        const t = Math.pow(Math.min(1, Math.max(0, (l/255) * v)), 1.1);
+        d[i]   = dark[0] + (light[0]-dark[0])*t;
+        d[i+1] = dark[1] + (light[1]-dark[1])*t;
+        d[i+2] = dark[2] + (light[2]-dark[2])*t;
+      }
+    }
+    ctx.putImageData(img,0,0);
+
+    // light leak acak di salah satu sudut
+    if(opts.leak){
+      const gx = Math.random() < 0.5 ? w*0.95 : w*0.05;
+      const gy = h * (0.75 + Math.random()*0.25);
+      const r = w * (0.12 + Math.random()*0.1);
+      const g = ctx.createRadialGradient(gx,gy,0,gx,gy,r);
+      g.addColorStop(0,'rgba(255,244,214,.95)');
+      g.addColorStop(1,'rgba(255,244,214,0)');
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = g;
+      ctx.fillRect(0,0,w,h);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    // tepi film sobek (kiri & atas)
+    ctx.fillStyle = '#080605';
+    let e = 6;
+    const base = Math.max(4, w/55);
+    for(let y=0; y<h; y++){
+      e += (r()-0.5)*3; e = Math.min(base*1.8, Math.max(2, e));
+      ctx.fillRect(0, y, e, 1);
+    }
+    e = 4;
+    for(let x=0; x<w; x++){
+      e += (r()-0.5)*2; e = Math.min(base, Math.max(1, e));
+      ctx.fillRect(x, 0, 1, e);
+    }
+    return canvas;
+  }
+
+  function capture(){
+    const c = document.createElement('canvas');
+    const w = video.videoWidth || 640;
+    const h = video.videoHeight || 480;
+    const isFilm = filterMode === 'film';
+    const cw = isFilm ? Math.round(h*0.8) : w;
+    c.width = cw; c.height = h;
+    const ctx = c.getContext('2d');
+    // mirror to match preview
+    ctx.translate(cw,0);
+    ctx.scale(-1,1);
+    if(filterMode === 'bw' || filterMode === 'koran'){ ctx.filter = 'grayscale(1) contrast(1.15)'; }
+    if(isFilm){ ctx.drawImage(video, (w-cw)/2, 0, cw, h, 0, 0, cw, h); }
+    else { ctx.drawImage(video, 0, 0, w, h); }
+    flashEl.classList.remove('pop'); void flashEl.offsetWidth; flashEl.classList.add('pop');
+
+    let finalCanvas = c;
+    if(filterMode === 'sepia'){ finalCanvas = applyVintage(c, {}); }
+    if(filterMode === 'film'){ finalCanvas = applyFilm(c, {seed: Math.floor(Math.random()*1e9), leak: Math.random() < 0.4}); }
+    if(filterMode === 'koran'){
+      finalCanvas = applyHalftone(c);
+    }
+    return finalCanvas.toDataURL('image/jpeg', 0.92);
+  }
+
+  function placeShot(index, dataUrl){
+    const frame = frames[index];
+    frame.classList.remove('empty');
+    let img = frame.querySelector('img');
+    if(!img){
+      img = document.createElement('img');
+      frame.insertBefore(img, frame.firstChild);
+    }
+    img.src = dataUrl;
+  }
+
+  function clearFrame(index){
+    const frame = frames[index];
+    frame.classList.add('empty');
+    const img = frame.querySelector('img');
+    if(img) img.remove();
+  }
+
+  function updateCounterAndDownload(){
+    const filled = shots.filter(s=>!!s).length;
+    shotCounter.textContent = filled + ' / 4';
+    downloadBtn.disabled = filled < 4;
+  }
+
+  async function startSequence(){
+    if(busy) return;
+    busy = true;
+    startBtn.disabled = true;
+    resetBtn.disabled = true;
+    downloadBtn.disabled = true;
+    shots = [undefined, undefined, undefined, undefined];
+    frames.forEach(f=>clearFrame(+f.dataset.slot));
+    shotCounter.textContent = '0 / 4';
+
+    for(let i=0;i<4;i++){
+      hint.textContent = 'Bersiap untuk foto ' + (i+1) + ' dari 4...';
+      await runCountdown();
+      const dataUrl = capture();
+      shots[i] = dataUrl;
+      placeShot(i, dataUrl);
+      updateCounterAndDownload();
+      await wait(500);
+    }
+
+    hint.textContent = 'Selesai! Arahkan kursor ke salah satu foto lalu klik "ULANG" kalau mau ambil ulang, atau langsung unduh.';
+    startBtn.disabled = false;
+    resetBtn.disabled = false;
+    busy = false;
+  }
+
+  async function retakeOne(index){
+    if(busy) return;
+    busy = true;
+    startBtn.disabled = true;
+    resetBtn.disabled = true;
+    downloadBtn.disabled = true;
+    frames[index].classList.add('busy');
+    hint.textContent = 'Mengambil ulang foto ' + (index+1) + '...';
+
+    await runCountdown();
+    const dataUrl = capture();
+    shots[index] = dataUrl;
+    placeShot(index, dataUrl);
+    updateCounterAndDownload();
+
+    frames[index].classList.remove('busy');
+    hint.textContent = shots.filter(s=>!!s).length === 4
+      ? 'Selesai! Klik "UNDUH STRIP" untuk menyimpan hasilnya.'
+      : 'Klik "MULAI" untuk melengkapi sisa foto.';
+    startBtn.disabled = false;
+    resetBtn.disabled = false;
+    busy = false;
+  }
+
+  function resetAll(){
+    shots = [];
+    frames.forEach(f=>clearFrame(+f.dataset.slot));
+    shotCounter.textContent = '0 / 4';
+    downloadBtn.disabled = true;
+    hint.textContent = 'Klik "MULAI" untuk ambil 4 foto berurutan.';
+  }
+
+  frames.forEach(frame=>{
+    const retake = frame.querySelector('.retake');
+    retake.addEventListener('click', ()=>{
+      if(frame.classList.contains('empty')) return;
+      retakeOne(+frame.dataset.slot);
+    });
+  });
+
+  async function buildStripAndDownload(){
+    if(shots.length < 4) return;
+    if(filterMode === 'film'){
+      const cellW = 480, cellH = 600, g = 8;
+      const cv = document.createElement('canvas');
+      cv.width = cellW*2 + g*3; cv.height = cellH*2 + g*3;
+      const cx2 = cv.getContext('2d');
+      cx2.fillStyle = '#0a0807';
+      cx2.fillRect(0,0,cv.width,cv.height);
+      for(let i=0;i<4;i++){
+        const im = new Image();
+        await new Promise(res=>{ im.onload = res; im.src = shots[i]; });
+        cx2.drawImage(im, g + (i%2)*(cellW+g), g + Math.floor(i/2)*(cellH+g), cellW, cellH);
+      }
+      const a = document.createElement('a');
+      a.download = randomName('film');
+      a.href = cv.toDataURL('image/jpeg', 0.95);
+      a.click();
+      return;
+    }
+    const padding = 28;
+    const gap = 20;
+    const photoW = 480;
+    const photoH = 360;
+    const footerH = 70;
+    const stripW = photoW + padding*2;
+    const stripH = padding + (photoH+gap)*4 + footerH;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = stripW;
+    canvas.height = stripH;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#faf6ec';
+    ctx.fillRect(0,0,stripW,stripH);
+
+    for(let i=0;i<4;i++){
+      const img = new Image();
+      await new Promise(res=>{ img.onload = res; img.src = shots[i]; });
+      const y = padding + i*(photoH+gap);
+      ctx.fillStyle = '#0c0c0c';
+      ctx.fillRect(padding, y, photoW, photoH);
+      ctx.drawImage(img, padding, y, photoW, photoH);
+    }
+
+    ctx.fillStyle = '#161311';
+    ctx.font = 'italic 26px Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.globalAlpha = 0.8;
+    ctx.fillText('photobooth · jayapura', stripW/2, stripH - footerH/2 + 8);
+    ctx.globalAlpha = 1;
+
+    const link = document.createElement('a');
+    link.download = randomName('strip');
+    link.href = canvas.toDataURL('image/jpeg', 0.95);
+    link.click();
+  }
+
+  startBtn.addEventListener('click', startSequence);
+  resetBtn.addEventListener('click', resetAll);
+  downloadBtn.addEventListener('click', buildStripAndDownload);
+
+  startBtn.disabled = true;
+  initCamera();
+})();
+</script>
+</body>
+</html>
